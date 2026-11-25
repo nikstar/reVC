@@ -1099,6 +1099,18 @@ bool _InputMouseNeedsExclusive()
 	return !(vm.flags & rwVIDEOMODEEXCLUSIVE) || lastCursorMode == GLFW_CURSOR_HIDDEN;
 }
 
+static void
+resizeCameraToFramebuffer(int width, int height)
+{
+	if(width <= 0 || height <= 0)
+		return;
+
+	RsGlobal.maximumWidth = width;
+	RsGlobal.maximumHeight = height;
+	RwRect rect = { 0, 0, width, height };
+	RsEventHandler(rsCAMERASIZE, &rect);
+}
+
 void psPostRWinit(void)
 {
 	RwVideoMode vm;
@@ -1122,6 +1134,11 @@ void psPostRWinit(void)
 
 	if(!(vm.flags & rwVIDEOMODEEXCLUSIVE))
 		glfwSetWindowSize(PSGLOBAL(window), RsGlobal.maximumWidth, RsGlobal.maximumHeight);
+
+	// A Retina window is measured in points, while the camera renders in pixels.
+	int width, height;
+	glfwGetFramebufferSize(PSGLOBAL(window), &width, &height);
+	resizeCameraToFramebuffer(width, height);
 
 	// Make sure all keys are released
 	CPad::GetPad(0)->Clear(true);
@@ -1149,15 +1166,6 @@ RwBool _psSetVideoMode(RwInt32 subSystem, RwInt32 videoMode)
 
 	RwInitialised = TRUE;
 	useDefault = FALSE;
-	
-	RwRect r;
-	
-	r.x = 0;
-	r.y = 0;
-	r.w = RsGlobal.maximumWidth;
-	r.h = RsGlobal.maximumHeight;
-
-	RsEventHandler(rsCAMERASIZE, &r);
 	
 	psPostRWinit();
 	
@@ -1435,33 +1443,12 @@ void dummyHandler(int sig){
 #endif
 
 void resizeCB(GLFWwindow* window, int width, int height) {
-	/*
-	* Handle event to ensure window contents are displayed during re-size
-	* as this can be disabled by the user, then if there is not enough
-	* memory things don't work.
-	*/
-	/* redraw window */
+	if(!RwInitialised || width <= 0 || height <= 0)
+		return;
 
-	if (RwInitialised && gGameState == GS_PLAYING_GAME)
-	{
+	resizeCameraToFramebuffer(width, height);
+	if(gGameState == GS_PLAYING_GAME)
 		RsEventHandler(rsIDLE, (void *)TRUE);
-	}
-
-	if (RwInitialised && height > 0 && width > 0) {
-		RwRect r;
-
-		// TODO fix artifacts of resizing with mouse
-		RsGlobal.maximumHeight = height;
-		RsGlobal.maximumWidth = width;
-
-		r.x = 0;
-		r.y = 0;
-		r.w = width;
-		r.h = height;
-
-		RsEventHandler(rsCAMERASIZE, &r);
-	}
-//	glfwSetWindowPos(window, 0, 0);
 }
 
 void scrollCB(GLFWwindow* window, double xoffset, double yoffset) {
@@ -2006,6 +1993,14 @@ main(int argc, char *argv[])
 
 	openParams.width = RsGlobal.maximumWidth;
 	openParams.height = RsGlobal.maximumHeight;
+#if defined(__APPLE__) && defined(IMPROVED_VIDEOMODE)
+	// Let Cocoa position the window at its saved size on first display.
+	if(FrontEndMenuManager.m_nPrefsWindowed &&
+	   FrontEndMenuManager.m_nPrefsWidth > 0 && FrontEndMenuManager.m_nPrefsHeight > 0){
+		openParams.width = FrontEndMenuManager.m_nPrefsWidth;
+		openParams.height = FrontEndMenuManager.m_nPrefsHeight;
+	}
+#endif
 	openParams.windowtitle = RsGlobal.appName;
 	openParams.window = &PSGLOBAL(window);
 	
@@ -2046,19 +2041,6 @@ main(int argc, char *argv[])
 		RsEventHandler(rsCOMMANDLINE, argv[i]);
 	}
 
-	/* 
-	 * Force a camera resize event...
-	 */
-	{
-		RwRect r;
-
-		r.x = 0;
-		r.y = 0;
-		r.w = RsGlobal.maximumWidth;
-		r.h = RsGlobal.maximumHeight;
-
-		RsEventHandler(rsCAMERASIZE, &r);
-	}
 #ifdef _WIN32
 	SystemParametersInfo(SPI_SETPOWEROFFACTIVE, FALSE, nil, SPIF_SENDCHANGE);
 	SystemParametersInfo(SPI_SETLOWPOWERACTIVE, FALSE, nil, SPIF_SENDCHANGE);

@@ -6,6 +6,7 @@
 #include "skeleton.h"
 #include "Debug.h"
 #include "MBlur.h"
+#include "postfx.h"
 #if !defined(FINAL) || defined(DEBUGMENU)
 #include "rtcharse.h"
 #endif
@@ -493,8 +494,14 @@ CameraSize(RwCamera * camera, RwRect * rect,
 				 */
 
 				r.x = r.y = 0;
+#if defined(__APPLE__) && defined(RW_GL3) && !defined(LIBRW_SDL2)
+				// The fullscreen video mode can also report logical points.
+				r.w = RsGlobal.maximumWidth;
+				r.h = RsGlobal.maximumHeight;
+#else
 				r.w = videoMode.width;
 				r.h = videoMode.height;
+#endif
 				rect = &r;
 			}
 			else
@@ -583,10 +590,15 @@ CameraSize(RwCamera * camera, RwRect * rect,
 			raster->height = zRaster->height = rect->h;
 #endif
 #ifdef FIX_BUGS
+#ifdef EXTENDED_COLOURFILTER
+			if(CPostFX::pFrontBuffer)
+				CPostFX::Open(camera);
+#else
 			if(CMBlur::BlurOn){
 				CMBlur::MotionBlurClose();
 				CMBlur::MotionBlurOpen(camera);
 			}
+#endif
 #endif
 		}
 
