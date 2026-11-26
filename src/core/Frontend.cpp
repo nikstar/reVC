@@ -466,6 +466,9 @@ CMenuManager::SwitchToNewScreen(int8 screen)
 
 CMenuManager::CMenuManager()
 {
+#ifdef MACOS_NATIVE_FULLSCREEN
+	m_nPrefsWindowed = 1;
+#endif
 	m_StatsScrollSpeed = 150.0f;
 	m_StatsScrollDirection = 1;
 	m_PrefsSfxVolume = 49;
@@ -845,7 +848,7 @@ CMenuManager::DisplayHelperText(char *text)
 
 			if (aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_Action == MENUACTION_SCREENRES) {
 				CFont::PrintString(SCREEN_STRETCH_FROM_RIGHT(HELPER_TEXT_RIGHT_MARGIN), SCREEN_SCALE_FROM_BOTTOM(HELPER_TEXT_BOTTOM_MARGIN),
-					m_bGameNotLoaded ? TheText.Get("FET_MIG") : TheText.Get("FEH_NA"));
+					CanChangeScreenResolution() ? TheText.Get("FET_MIG") : TheText.Get("FEH_NA"));
 				return;
 			}
 
@@ -1279,10 +1282,16 @@ CMenuManager::DrawStandardMenus(bool activeScreen)
 					rightText = TheText.Get(MousePointerStateHelper.bInvertVertically ? "FEM_OFF" : "FEM_ON");
 					break;
 				case MENUACTION_SCREENRES:
-					AsciiToUnicode(_psGetVideoModeList()[m_nDisplayVideoMode], unicodeTemp);
+#ifdef MACOS_NATIVE_FULLSCREEN
+					if (!m_nPrefsWindowed) {
+						sprintf(gString, "%d X %d", RsGlobal.maximumWidth, RsGlobal.maximumHeight);
+						AsciiToUnicode(gString, unicodeTemp);
+					} else
+#endif
+						AsciiToUnicode(_psGetVideoModeList()[m_nDisplayVideoMode], unicodeTemp);
 					rightText = unicodeTemp;
 
-					if (!m_bGameNotLoaded) {
+					if (!CanChangeScreenResolution()) {
 						CFont::SetColor(CRGBA(DARKMENUOPTION_COLOR.r, DARKMENUOPTION_COLOR.g, DARKMENUOPTION_COLOR.b, FadeIn(255)));
 					}
 					break;
@@ -3070,6 +3079,17 @@ CMenuManager::LoadAllTextures()
 	CTimer::Update();
 }
 
+bool
+CMenuManager::CanChangeScreenResolution() const
+{
+#ifdef MACOS_NATIVE_FULLSCREEN
+	// A fullscreen Space uses the current display's drawable size.
+	if (!m_nPrefsWindowed)
+		return false;
+#endif
+	return m_bGameNotLoaded;
+}
+
 void
 CMenuManager::LoadSettings()
 {
@@ -4848,7 +4868,7 @@ CMenuManager::ProcessUserInput(uint8 goDown, uint8 goUp, uint8 optionSelected, u
 				SwitchToNewScreen(-2);
 				break;
 			case MENUACTION_SCREENRES:
-				if (m_nDisplayVideoMode != m_nPrefsVideoMode) {
+				if (CanChangeScreenResolution() && m_nDisplayVideoMode != m_nPrefsVideoMode) {
 					m_nPrefsVideoMode = m_nDisplayVideoMode;
 					_psSelectScreenVM(m_nPrefsVideoMode);
 					DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
@@ -5084,7 +5104,7 @@ CMenuManager::ProcessUserInput(uint8 goDown, uint8 goUp, uint8 optionSelected, u
 				break;
 #endif
 			case MENUACTION_SCREENRES:
-				if (m_bGameNotLoaded) {
+				if (CanChangeScreenResolution()) {
 					RwChar** videoMods = _psGetVideoModeList();
 					if (changeAmount > 0) {
 						do {

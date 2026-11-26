@@ -46,6 +46,9 @@ extern void _InputInitialiseJoys();
 extern void HandleExit();
 
 extern void _psSelectScreenVM(RwInt32 videoMode);
+#ifdef MACOS_NATIVE_FULLSCREEN
+extern void psToggleFullScreen();
+#endif
 
 extern void InitialiseLanguage();
 

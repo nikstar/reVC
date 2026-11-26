@@ -756,12 +756,24 @@ cSampleManager::IsMP3RadioChannelAvailable(void)
 
 void cSampleManager::ReleaseDigitalHandle(void)
 {
-	// TODO? alcSuspendContext
+#ifdef MACOS_NATIVE_FULLSCREEN
+	if (ALDevice && alcIsExtensionPresent(ALDevice, "ALC_SOFT_pause_device")) {
+		auto pause = (LPALCDEVICEPAUSESOFT)alcGetProcAddress(ALDevice, "alcDevicePauseSOFT");
+		if (pause)
+			pause(ALDevice);
+	}
+#endif
 }
 
 void cSampleManager::ReacquireDigitalHandle(void)
 {
-	// TODO? alcProcessContext
+#ifdef MACOS_NATIVE_FULLSCREEN
+	if (ALDevice && alcIsExtensionPresent(ALDevice, "ALC_SOFT_pause_device")) {
+		auto resume = (LPALCDEVICERESUMESOFT)alcGetProcAddress(ALDevice, "alcDeviceResumeSOFT");
+		if (resume)
+			resume(ALDevice);
+	}
+#endif
 }
 
 bool8

@@ -823,6 +823,7 @@ public:
 	int GetStartOptionsCntrlConfigScreens();
 	void InitialiseChangedLanguageSettings();
 	void LoadAllTextures();
+	bool CanChangeScreenResolution() const;
 	void LoadSettings();
 	void MessageScreen(const char *str, bool);
 	void SmallMessageScreen(const char *str);

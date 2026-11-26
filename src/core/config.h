@@ -321,6 +321,9 @@ enum Config {
 #define USE_TXD_CDIMAGE		// generate and load textures from txd.img
 #define PS2_ALPHA_TEST		// emulate ps2 alpha test 
 #define IMPROVED_VIDEOMODE	// save and load videomode parameters instead of a magic number
+#if defined(__APPLE__) && defined(RW_GL3) && !defined(LIBRW_SDL2) && defined(IMPROVED_VIDEOMODE)
+#define MACOS_NATIVE_FULLSCREEN
+#endif
 #define DISABLE_LOADING_SCREEN // disable the loading screen which vastly improves the loading time
 #define DISABLE_VSYNC_ON_TEXTURE_CONVERSION // make texture conversion work faster by disabling vsync
 #define ANISOTROPIC_FILTERING	// set all textures to max anisotropic filtering

@@ -390,6 +390,10 @@ project "reVC"
 		targetdir "bin/%{cfg.platform}/%{cfg.buildcfg}"
 	end
 
+	filter { "platforms:macosx*gl3_glfw*" }
+		files { "src/skel/glfw/MacFullScreen.mm" }
+		links { "AppKit.framework" }
+
 	filter { "system:macosx" }
 		files { "res/images/reVC.icns", "res/macos/Info.plist", "res/macos/ThirdPartyNotices.txt" }
 

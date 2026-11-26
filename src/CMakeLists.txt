@@ -208,6 +208,12 @@ else()
     set(${PROJECT}_C_CXX_EXTENSIONS OFF)
 endif()
 
+if(APPLE AND LIBRW_PLATFORM STREQUAL "GL3" AND LIBRW_GL3_GFXLIB STREQUAL "GLFW")
+    enable_language(OBJCXX)
+    target_sources(${EXECUTABLE} PRIVATE skel/glfw/MacFullScreen.mm)
+    target_link_libraries(${EXECUTABLE} PRIVATE "-framework AppKit")
+endif()
+
 if(LIBRW_PLATFORM_GL3 AND LIBRW_GL3_GFXLIB STREQUAL "GLFW")
 	include(CheckSymbolExists)
 

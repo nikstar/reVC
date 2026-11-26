@@ -51,6 +51,9 @@ long _dwOperatingSystemVersion;
 #include "AnimViewer.h"
 #include "Font.h"
 #include "MemoryMgr.h"
+#ifdef MACOS_NATIVE_FULLSCREEN
+#include "MacFullScreen.h"
+#endif
 
 // This is defined on project-level, via premake5 or cmake
 #ifdef GET_KEYBOARD_INPUT_FROM_X11
@@ -767,6 +770,14 @@ psSelectDevice()
 		desktopHeight = desktopMode->height;
 	}
 
+#ifdef IMPROVED_VIDEOMODE
+#ifdef MACOS_NATIVE_FULLSCREEN
+	// AppKit moves a regular GLFW window into a fullscreen Space.
+	const bool useWindowedVideoMode = true;
+#else
+	const bool useWindowedVideoMode = FrontEndMenuManager.m_nPrefsWindowed;
+#endif
+#endif
 	RwBool modeFound = FALSE;
 	
 	if ( !useDefault )
@@ -889,7 +900,7 @@ psSelectDevice()
 
 		RwInt32 selectedFsMode = bestFsMode >= 0 ? bestFsMode : firstFsMode;
 		GcurSelVM = selectedFsMode;
-		if(GcurSelVM < 0 && FrontEndMenuManager.m_nPrefsWindowed)
+		if(GcurSelVM < 0 && useWindowedVideoMode)
 			GcurSelVM = bestWndMode;
 		if(GcurSelVM < 0){
 			printf("WARNING: Cannot find desired video mode, selecting device cancelled\n");
@@ -906,7 +917,7 @@ psSelectDevice()
 #endif
 
 #ifdef IMPROVED_VIDEOMODE
-	if (FrontEndMenuManager.m_nPrefsWindowed && bestWndMode < 0){
+	if (useWindowedVideoMode && bestWndMode < 0){
 		printf("WARNING: Cannot find windowed video mode, selecting device cancelled\n");
 		return FALSE;
 	}
@@ -915,13 +926,18 @@ psSelectDevice()
 	RwEngineGetVideoModeInfo(&vm, GcurSelVM);
 
 #ifdef IMPROVED_VIDEOMODE
-	if ((!FrontEndMenuManager.m_nPrefsWindowed || (vm.flags & rwVIDEOMODEEXCLUSIVE)) &&
-	    vm.width > 0 && vm.height > 0 && vm.depth > 0) {
+#ifdef MACOS_NATIVE_FULLSCREEN
+	// Keep the saved window size at startup. A selected resolution sets a new size.
+	const bool useModeSize = useDefault && (vm.flags & rwVIDEOMODEEXCLUSIVE);
+#else
+	const bool useModeSize = !useWindowedVideoMode || (vm.flags & rwVIDEOMODEEXCLUSIVE);
+#endif
+	if (useModeSize && vm.width > 0 && vm.height > 0 && vm.depth > 0) {
 		FrontEndMenuManager.m_nPrefsWidth = vm.width;
 		FrontEndMenuManager.m_nPrefsHeight = vm.height;
 		FrontEndMenuManager.m_nPrefsDepth = vm.depth;
 	}
-	if (FrontEndMenuManager.m_nPrefsWindowed)
+	if (useWindowedVideoMode)
 		GcurSelVM = bestWndMode;
 #endif
 
@@ -1067,6 +1083,10 @@ long _InputInitialiseMouse(bool exclusive)
 {
 	// Disabled = keep cursor centered and hide
 	lastCursorMode = exclusive ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_HIDDEN;
+#ifdef MACOS_NATIVE_FULLSCREEN
+	if (!glfwGetWindowAttrib(PSGLOBAL(window), GLFW_FOCUSED))
+		return 0;
+#endif
 	glfwSetInputMode(PSGLOBAL(window), GLFW_CURSOR, lastCursorMode);
 	if (exclusive && glfwGetWindowAttrib(PSGLOBAL(window), GLFW_FOCUSED))
 		PSGLOBAL(cursorIsInWindow) = true;
@@ -1111,6 +1131,24 @@ resizeCameraToFramebuffer(int width, int height)
 	RsEventHandler(rsCAMERASIZE, &rect);
 }
 
+#ifdef MACOS_NATIVE_FULLSCREEN
+void psToggleFullScreen()
+{
+	MacSetFullScreen(PSGLOBAL(window), FrontEndMenuManager.m_nPrefsWindowed != 0);
+}
+
+static void
+macFullScreenChanged(bool fullScreen)
+{
+	PSGLOBAL(fullScreen) = fullScreen;
+	FrontEndMenuManager.m_nSelectedScreenMode = !fullScreen;
+	if (FrontEndMenuManager.m_nPrefsWindowed != !fullScreen) {
+		FrontEndMenuManager.m_nPrefsWindowed = !fullScreen;
+		FrontEndMenuManager.SaveSettings();
+	}
+}
+#endif
+
 void psPostRWinit(void)
 {
 	RwVideoMode vm;
@@ -1127,6 +1165,9 @@ void psPostRWinit(void)
 #endif
 	glfwSetWindowIconifyCallback(PSGLOBAL(window), windowIconifyCB);
 	glfwSetWindowFocusCallback(PSGLOBAL(window), windowFocusCB);
+#ifdef MACOS_NATIVE_FULLSCREEN
+	WindowFocused = glfwGetWindowAttrib(PSGLOBAL(window), GLFW_FOCUSED);
+#endif
 	glfwSetJoystickCallback(joysChangeCB);
 
 	_InputInitialiseJoys();
@@ -1139,6 +1180,11 @@ void psPostRWinit(void)
 	int width, height;
 	glfwGetFramebufferSize(PSGLOBAL(window), &width, &height);
 	resizeCameraToFramebuffer(width, height);
+
+#ifdef MACOS_NATIVE_FULLSCREEN
+	MacObserveFullScreen(PSGLOBAL(window), macFullScreenChanged);
+	MacSetFullScreen(PSGLOBAL(window), !FrontEndMenuManager.m_nPrefsWindowed);
+#endif
 
 	// Make sure all keys are released
 	CPad::GetPad(0)->Clear(true);
@@ -1154,6 +1200,9 @@ RwBool _psSetVideoMode(RwInt32 subSystem, RwInt32 videoMode)
 
 	_InputShutdownMouse();
 	centreMouseForDesktop();
+#ifdef MACOS_NATIVE_FULLSCREEN
+	MacObserveFullScreen(nullptr, nullptr);
+#endif
 	RsEventHandler(rsRWTERMINATE, nil);
 	
 	GcurSel = subSystem;
@@ -1447,6 +1496,10 @@ void resizeCB(GLFWwindow* window, int width, int height) {
 		return;
 
 	resizeCameraToFramebuffer(width, height);
+#ifdef MACOS_NATIVE_FULLSCREEN
+	if (!WindowFocused)
+		return;
+#endif
 	if(gGameState == GS_PLAYING_GAME)
 		RsEventHandler(rsIDLE, (void *)TRUE);
 }
@@ -1893,6 +1946,10 @@ cursorEnterCB(GLFWwindow* window, int entered) {
 void
 windowFocusCB(GLFWwindow* window, int focused) {
 	WindowFocused = !!focused;
+#ifdef MACOS_NATIVE_FULLSCREEN
+	// Release gameplay mouse capture while another app or Space has focus.
+	glfwSetInputMode(window, GLFW_CURSOR, focused ? lastCursorMode : GLFW_CURSOR_NORMAL);
+#endif
 	if (!focused)
 		PSGLOBAL(cursorIsInWindow) = false;
 	else if (lastCursorMode == GLFW_CURSOR_DISABLED || glfwGetWindowAttrib(window, GLFW_HOVERED))
@@ -1995,8 +2052,7 @@ main(int argc, char *argv[])
 	openParams.height = RsGlobal.maximumHeight;
 #if defined(__APPLE__) && defined(IMPROVED_VIDEOMODE)
 	// Let Cocoa position the window at its saved size on first display.
-	if(FrontEndMenuManager.m_nPrefsWindowed &&
-	   FrontEndMenuManager.m_nPrefsWidth > 0 && FrontEndMenuManager.m_nPrefsHeight > 0){
+	if(FrontEndMenuManager.m_nPrefsWidth > 0 && FrontEndMenuManager.m_nPrefsHeight > 0){
 		openParams.width = FrontEndMenuManager.m_nPrefsWidth;
 		openParams.height = FrontEndMenuManager.m_nPrefsHeight;
 	}
@@ -2153,6 +2209,17 @@ main(int argc, char *argv[])
 #endif
 		{
 			glfwPollEvents();
+#ifdef MACOS_NATIVE_FULLSCREEN
+			if (!WindowFocused) {
+				CTimer::Suspend();
+				DMAudio.ReleaseDigitalHandle();
+				while (!WindowFocused && !RsGlobal.quit && !glfwWindowShouldClose(PSGLOBAL(window)))
+					glfwWaitEventsTimeout(0.25);
+				DMAudio.ReacquireDigitalHandle();
+				CTimer::Resume();
+				continue;
+			}
+#endif
 #ifdef GET_KEYBOARD_INPUT_FROM_X11
 			checkKeyPresses();
 #endif
@@ -2482,6 +2549,9 @@ main(int argc, char *argv[])
 	 */
 	_InputShutdownMouse();
 	centreMouseForDesktop();
+#ifdef MACOS_NATIVE_FULLSCREEN
+	MacObserveFullScreen(nullptr, nullptr);
+#endif
 	RsEventHandler(rsRWTERMINATE, nil);
 
 	/*

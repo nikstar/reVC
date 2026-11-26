@@ -37,7 +37,9 @@
 
 #ifdef CUSTOM_FRONTEND_OPTIONS
 
-#if defined(IMPROVED_VIDEOMODE) && !defined(GTA_HANDHELD)
+#ifdef MACOS_NATIVE_FULLSCREEN
+	#define VIDEOMODE_SELECTOR MENUACTION_CFO_DYNAMIC, "FEM_SCF", { new CCFODynamic((int8*)&FrontEndMenuManager.m_nPrefsWindowed, "VideoMode", "Windowed", MacScreenModeDraw, MacScreenModePress) }, 0, 0, MENUALIGN_LEFT,
+#elif defined(IMPROVED_VIDEOMODE) && !defined(GTA_HANDHELD)
 	#define VIDEOMODE_SELECTOR MENUACTION_CFO_SELECT, "FEM_SCF", { new CCFOSelect((int8*)&FrontEndMenuManager.m_nPrefsWindowed, "VideoMode", "Windowed", screenModes, 2, true, ScreenModeAfterChange, true) }, 0, 0, MENUALIGN_LEFT,
 #else
 	#define VIDEOMODE_SELECTOR
@@ -279,7 +281,18 @@ wchar* MultiSamplingDraw(bool *disabled, bool userHovering) {
 }
 #endif
 
-#ifdef IMPROVED_VIDEOMODE
+#ifdef MACOS_NATIVE_FULLSCREEN
+static wchar *MacScreenModeDraw(bool *, bool)
+{
+	return TheText.Get(FrontEndMenuManager.m_nPrefsWindowed ? "FED_WND" : "FED_FLS");
+}
+
+static void MacScreenModePress(int8 action)
+{
+	if (action != FEOPTION_ACTION_FOCUSLOSS)
+		psToggleFullScreen();
+}
+#elif defined(IMPROVED_VIDEOMODE)
 const char* screenModes[] = { "FED_FLS", "FED_WND" };
 void ScreenModeAfterChange(int8 before, int8 after)
 {
