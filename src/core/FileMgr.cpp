@@ -204,7 +204,15 @@ FindGameRoot(char *path, size_t pathSize)
 	if(_getcwd(cwd, sizeof(cwd)) != nil && SetGameRoot(cwd, path, pathSize))
 		return true;
 
-	return ReadGameRoot(path, pathSize) || ChooseGameRoot(path, pathSize);
+	if (ReadGameRoot(path, pathSize))
+		return true;
+
+	char installedData[FILEMGR_PATH_SIZE];
+	int length = snprintf(installedData, sizeof(installedData), "%s/Game Data", GetMacOSUserFilesFolder());
+	if (length >= 0 && length < (int)sizeof(installedData) && SetGameRoot(installedData, path, pathSize))
+		return true;
+
+	return ChooseGameRoot(path, pathSize);
 }
 #endif
 

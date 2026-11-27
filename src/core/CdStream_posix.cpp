@@ -20,6 +20,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifdef __APPLE__
+#include <errno.h>
+#endif
 #include <sys/resource.h>
 #include <stdarg.h>
 #include <limits.h>
@@ -59,6 +62,26 @@ re3_sem_close(sem_t* sem)
 	sem_destroy(sem);
 	free(sem);
 }
+
+#elif defined(__APPLE__)
+
+// Darwin requires named POSIX semaphores. Only this game instance uses them.
+static sem_t*
+re3_sem_open(void)
+{
+	char name[32];
+	sem_t *sem;
+	do {
+		snprintf(name, sizeof(name), "/reVC-%x-%x", (unsigned)getpid(), arc4random());
+		sem = sem_open(name, O_CREAT | O_EXCL, 0600, 1);
+	} while (sem == SEM_FAILED && errno == EEXIST);
+	if (sem != SEM_FAILED)
+		sem_unlink(name);
+	return sem;
+}
+
+#define RE3_SEM_OPEN(...) re3_sem_open()
+#define RE3_SEM_CLOSE(sem, ...) sem_close(sem)
 
 #elif !defined(ANDROID)
 

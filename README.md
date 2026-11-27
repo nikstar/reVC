@@ -24,6 +24,12 @@ We cannot build for PS2 or Xbox yet. If you're interested in doing so, get in to
   
 - Extract the downloaded zip over your GTA VC directory and run reVC. The zip includes the binary, updated and additional gamefiles and in case of OpenAL the required dlls.
 
+### Updating GTA Vice City.app on macOS
+
+Run `./scripts/update-macos-app` from this checkout to build reVC with CMake and update `/Applications/GTA Vice City.app`. The script reuses the configuration in `build/macos`. On the first update of a bundle containing the original game assets, it backs up the entire app under `~/Library/Application Support/reVC/Backups`, copies its assets to `Game Data` in the same support folder, and imports saves into free slots. Later updates replace only the app.
+
+During gameplay, press **Control-M** to open the debug menu. Under **Game → Pause in Background**, use the left or right arrow to change the setting. It defaults to on. Turn it off to keep gameplay and audio running when you switch apps or Spaces. The choice is saved in `~/Library/Application Support/reVC/reVC.ini`.
+
 ## Screenshots
 
 ![screen_ 1613087332](https://user-images.githubusercontent.com/1521437/107714111-f84f3200-6ccc-11eb-902e-d757481d579a.png)

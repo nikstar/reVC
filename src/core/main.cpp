@@ -97,6 +97,9 @@ bool gbShowTimebars;
 #ifdef DRAW_GAME_VERSION_TEXT
 bool gbDrawVersionText; // Our addition, we think it was always enabled on !MASTER builds
 #endif
+#ifdef MACOS_NATIVE_FULLSCREEN
+bool gbPauseInBackground = true;
+#endif
 #ifdef NO_MOVIES
 bool gbNoMovies;
 #endif

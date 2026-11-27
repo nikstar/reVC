@@ -72,6 +72,10 @@ bool FredIsInFirstPersonCam(void);
 extern bool gbDrawVersionText;
 #endif
 
+#ifdef MACOS_NATIVE_FULLSCREEN
+extern bool gbPauseInBackground;
+#endif
+
 #ifdef NO_MOVIES
 extern bool gbNoMovies;
 #endif

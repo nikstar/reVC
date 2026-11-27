@@ -2210,7 +2210,7 @@ main(int argc, char *argv[])
 		{
 			glfwPollEvents();
 #ifdef MACOS_NATIVE_FULLSCREEN
-			if (!WindowFocused) {
+			if (gbPauseInBackground && !WindowFocused) {
 				CTimer::Suspend();
 				DMAudio.ReleaseDigitalHandle();
 				while (!WindowFocused && !RsGlobal.quit && !glfwWindowShouldClose(PSGLOBAL(window)))

@@ -591,6 +591,9 @@ bool LoadINISettings()
 #ifdef DRAW_GAME_VERSION_TEXT
 	ReadIniIfExists("General", "DrawVersionText", &gbDrawVersionText);
 #endif
+#ifdef MACOS_NATIVE_FULLSCREEN
+	ReadIniIfExists("General", "PauseInBackground", &gbPauseInBackground);
+#endif
 #ifdef NO_MOVIES
 	ReadIniIfExists("General", "NoMovies", &gbNoMovies);
 #endif
@@ -699,6 +702,9 @@ void SaveINISettings()
 #endif
 #ifdef DRAW_GAME_VERSION_TEXT
 	StoreIni("General", "DrawVersionText", gbDrawVersionText);
+#endif
+#ifdef MACOS_NATIVE_FULLSCREEN
+	StoreIni("General", "PauseInBackground", gbPauseInBackground);
 #endif
 #ifdef NO_MOVIES
 	StoreIni("General", "NoMovies", gbNoMovies);
@@ -1166,6 +1172,10 @@ extern bool gbRenderWorld2;
 //		DebugMenuAddCmd("Reload", "HUD.TXD", CHud::ReloadTXD);
 #endif
 
+#ifdef MACOS_NATIVE_FULLSCREEN
+		DebugMenuAddVarBool8("Game", "Pause in Background", &gbPauseInBackground,
+		                     [] { FrontEndMenuManager.SaveSettings(); });
+#endif
 #ifdef MAP_ENHANCEMENTS
 		DebugMenuAddCmd("Game", "Teleport to map waypoint", TeleportToWaypoint);
 #endif

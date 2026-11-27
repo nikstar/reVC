@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Build reVC and update the installed GTA Vice City app on macOS."""
+
+import ctypes
+import filecmp
+import fcntl
+import os
+from pathlib import Path
+import plistlib
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BUILD = ROOT / "build/macos"
+APP = Path("/Applications/GTA Vice City.app")
+PROFILE = Path.home() / "Library/Application Support/reVC"
+BUNDLE_ID = "io.github.nikstar.reVC"
+
+
+def build():
+    cache = BUILD / "CMakeCache.txt"
+    if not cache.is_file():
+        subprocess.run(["cmake", "-S", ROOT, "-B", BUILD, "-DCMAKE_BUILD_TYPE=Release"], check=True)
+    cmake = next(line.split("=", 1)[1] for line in cache.read_text().splitlines()
+                 if line.startswith("CMAKE_COMMAND:INTERNAL="))
+    subprocess.run([cmake, "--build", BUILD, "--target", "reVC"], check=True)
+    bundle = BUILD / "src/reVC.app"
+    verify(bundle)
+    return bundle
+
+
+def verify(bundle):
+    subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", bundle], check=True)
+
+
+def copy_tree(source, dest):
+    # cp uses copy-on-write clones on APFS, and ordinary copies on other volumes.
+    subprocess.run(["/bin/cp", "-cRp", source, dest], check=True)
+
+
+def game_data(folder):
+    return all((folder / name).is_file() for name in ("data/gta_vc.dat", "models/gta3.img"))
+
+
+def import_profile(resources, temp):
+    slots = [f"GTAVCsf{i}.b" for i in range(1, 9)]
+    incoming = [name for name in slots if (resources / "userfiles" / name).is_file()]
+    # Fill original slot numbers first, then assign conflicting saves to free slots.
+    for name in sorted(incoming, key=lambda n: (PROFILE / n).exists()):
+        source = resources / "userfiles" / name
+        if any((PROFILE / n).is_file() and filecmp.cmp(source, PROFILE / n, shallow=False) for n in slots):
+            continue
+        for candidate in [name] + slots:
+            dest = PROFILE / candidate
+            if dest.exists():
+                continue
+            staged = temp / name
+            shutil.copy2(source, staged)
+            try:
+                os.link(staged, dest)
+            except FileExistsError:
+                continue
+            print(f"Imported {name} as {dest.name}.")
+            break
+        else:
+            print(f"All slots are occupied. {name} is preserved in the original app backup.")
+
+    settings = resources / "reVC.ini"
+    if settings.is_file() and not (PROFILE / settings.name).exists():
+        staged = temp / settings.name
+        shutil.copy2(settings, staged)
+        try:
+            os.link(staged, PROFILE / settings.name)
+        except FileExistsError:
+            pass
+
+
+def migrate(resources):
+    data = PROFILE / "Game Data"
+    if data.exists() and not game_data(data):
+        sys.exit(f"Existing folder has incomplete game data: {data}")
+    backups = PROFILE / "Backups"
+    backups.mkdir(exist_ok=True)
+    backup = Path(tempfile.mkdtemp(dir=backups, prefix="original-")) / APP.name
+    copy_tree(APP, backup)
+    print(f"Backed up the original app to {backup}.", flush=True)
+    with tempfile.TemporaryDirectory(dir=PROFILE) as tmp:
+        temp = Path(tmp)
+        if not data.exists():
+            staged = temp / data.name
+            copy_tree(resources, staged)
+            if not game_data(staged):
+                sys.exit("Could not verify the copied game data.")
+            staged.rename(data)
+        import_profile(resources, temp)
+
+
+def install(bundle):
+    resources = APP / "Contents/Resources"
+    info_path = Path("Contents/Info.plist")
+    previous = plistlib.loads((APP / info_path).read_bytes())
+    legacy = game_data(resources)
+    if not legacy and previous.get("CFBundleIdentifier") != BUNDLE_ID:
+        sys.exit(f"Unrecognized app at {APP}")
+    processes = subprocess.check_output(["/bin/ps", "-axo", "comm="], text=True).splitlines()
+    if any(proc.strip().startswith(str(APP / "Contents/MacOS") + "/") for proc in processes):
+        sys.exit(f"Quit {APP.name} before updating it.")
+
+    with tempfile.TemporaryDirectory(dir=APP.parent, prefix=".reVC-update-") as tmp:
+        staged = Path(tmp) / APP.name
+        copy_tree(bundle, staged)
+        plist = staged / info_path
+        info = plistlib.loads(plist.read_bytes())
+        info["CFBundleIdentifier"] = BUNDLE_ID
+        info["CFBundleName"] = previous.get("CFBundleName", "GTA Vice City")
+        icon = resources / Path(previous.get("CFBundleIconFile", "")).name
+        if not icon.suffix:
+            icon = icon.with_suffix(".icns")
+        if icon.is_file():
+            shutil.copyfile(icon, staged / "Contents/Resources" / info["CFBundleIconFile"])
+        plist.write_bytes(plistlib.dumps(info))
+        subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", staged], check=True)
+        verify(staged)
+        if legacy:
+            migrate(resources)
+
+        # On macOS RENAME_SWAP exchanges both directories in one filesystem operation.
+        swap = ctypes.CDLL(None, use_errno=True).renamex_np
+        swap.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        if swap(os.fsencode(staged), os.fsencode(APP), 2) != 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err), str(APP))
+    print(f"Updated {APP}.")
+
+
+if __name__ == "__main__":
+    if sys.platform != "darwin":
+        sys.exit("This updater runs on macOS.")
+    if not APP.is_dir() or APP.is_symlink():
+        sys.exit(f"Expected an installed app at {APP}")
+    PROFILE.mkdir(parents=True, exist_ok=True)
+    with (PROFILE / ".update.lock").open("a") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        install(build())
